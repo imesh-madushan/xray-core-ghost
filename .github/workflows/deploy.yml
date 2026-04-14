@@ -21,14 +21,15 @@ jobs:
           script: |
             cd /home/ubuntu/prj/xray-core-ghost
 
-            echo "Pulling latest code..."
+            echo "📥 Pulling latest code..."
             git pull origin main
 
-            echo "Building project..."
-            /usr/local/go/bin/go mod tidy
-            /usr/local/go/bin/go build -o xray
+            echo "⚙️ Building Xray Ghost..."
+            export PATH=$PATH:/usr/local/go/bin
+            CGO_ENABLED=0 go mod tidy
+            CGO_ENABLED=0 go build -o xray -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -v ./main
 
-            echo "Restarting service..."
+            echo "🔄 Restarting service..."
             sudo systemctl restart xray-ghost
 
-            echo "Done 🚀"
+            echo "✅ Deploy completed"
