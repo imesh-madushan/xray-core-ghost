@@ -37,8 +37,10 @@ jobs:
             /usr/local/go/bin/go mod tidy
 
             echo "🔨 Building Xray Ghost..."
+            SYS_OS=$(/usr/local/go/bin/go env GOOS)
+            SYS_ARCH=$(/usr/local/go/bin/go env GOARCH)
             CGO_ENABLED=0 /usr/local/go/bin/go build \
-              -o xray \
+              -o "xray-${SYS_OS}-${SYS_ARCH}" \
               -trimpath \
               -buildvcs=false \
               -ldflags="-s -w -buildid=" \
@@ -51,7 +53,7 @@ jobs:
 
             echo ""
             echo "📊 Build successful. Binary size:"
-            ls -lh xray
+            ls -lh "xray-${SYS_OS}-${SYS_ARCH}"
 
             echo ""
             echo "🔄 Running deployment script..."
@@ -72,8 +74,8 @@ jobs:
             echo "==============================================="
             echo ""
             echo "📊 Summary:"
-            echo "   Working Binary: /usr/local/x-ui/bin/xray"
-            echo "   Backup: /usr/local/x-ui/bin/xray.backup"
+            echo "   Working Binary: /usr/local/x-ui/bin/xray-${SYS_OS}-${SYS_ARCH}"
+            echo "   Backup: /usr/local/x-ui/bin/xray-${SYS_OS}-${SYS_ARCH}.backup"
             echo ""
             echo "🔗 To rollback if needed:"
             echo "   sudo bash /home/ubuntu/prj/xray-core-ghost/rollback-local.sh"
