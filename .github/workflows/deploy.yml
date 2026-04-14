@@ -44,10 +44,36 @@ jobs:
               -ldflags="-s -w -buildid=" \
               -v ./main
 
-            echo "📥 Installing from local script..."
-            sudo bash /home/ubuntu/prj/xray-core-ghost/install-local.sh install --version v0.0.0 --force
-            
-            echo "🔄 Restarting service..."
-            sudo systemctl restart xray-ghost
+            if [[ $? -ne 0 ]]; then
+              echo "❌ Build failed"
+              exit 1
+            fi
 
-            echo "✅ Deployment successful!"
+            echo ""
+            echo "📊 Build successful. Binary size:"
+            ls -lh xray
+
+            echo ""
+            echo "🔄 Running deployment script..."
+            sudo bash ./deploy-local.sh
+            
+            if [[ $? -ne 0 ]]; then
+              echo "❌ Deployment script failed"
+              exit 1
+            fi
+
+            echo ""
+            echo "📋 Running status check..."
+            bash ./status-local.sh
+
+            echo ""
+            echo "==============================================="
+            echo "✅ DEPLOYMENT COMPLETED SUCCESSFULLY"
+            echo "==============================================="
+            echo ""
+            echo "📊 Summary:"
+            echo "   Working Binary: /usr/local/bin/xray"
+            echo "   Backup: /usr/local/bin/xray.backup"
+            echo ""
+            echo "🔗 To rollback if needed:"
+            echo "   sudo bash /home/ubuntu/prj/xray-core-ghost/rollback-local.sh"
