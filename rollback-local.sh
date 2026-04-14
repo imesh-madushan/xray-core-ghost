@@ -48,7 +48,7 @@ BACKUP_VERSION=$($XRAY_BACKUP_PATH -version 2>&1 | head -1)
 echo -e "   Backup:  ${yellow}$BACKUP_VERSION${plain}"
 
 # Confirm action
-echo -e "\n${red}⚠️  This will restore the backup and restart x-ui${plain}"
+echo -e "\n${red}⚠️  This will restore the backup binary${plain}"
 read -p "Do you want to continue? (yes/no): " -r CONFIRM
 
 if [[ ! "$CONFIRM" =~ ^[Yy][Ee][Ss]$ ]]; then
@@ -57,7 +57,7 @@ if [[ ! "$CONFIRM" =~ ^[Yy][Ee][Ss]$ ]]; then
 fi
 
 # Step 1: Restore backup
-echo -e "\n${yellow}[1/3]${plain} Restoring backup binary..."
+echo -e "\n${yellow}[1/2]${plain} Restoring backup binary..."
 cp "$XRAY_BACKUP_PATH" "$XRAY_BIN_PATH"
 if [[ $? -ne 0 ]]; then
     echo -e "${red}❌ Failed to restore backup${plain}"
@@ -67,19 +67,11 @@ fi
 chmod +x "$XRAY_BIN_PATH"
 echo -e "${green}✅ Backup restored to working binary${plain}"
 
-# Step 2: Restart x-ui
-echo -e "\n${yellow}[2/3]${plain} Restarting x-ui..."
-if ! x-ui restart; then
-    echo -e "${red}❌ Failed to restart x-ui${plain}"
-    exit 1
-fi
-echo -e "${green}✅ x-ui restarted${plain}"
-
-# Step 3: Verify
-echo -e "\n${yellow}[3/3]${plain} Verifying service..."
+# Step 2: Verify
+echo -e "\n${yellow}[2/2]${plain} Verifying binary..."
 RESTORED_VERSION=$($XRAY_BIN_PATH -version 2>&1 | head -1)
 if [[ -n "$RESTORED_VERSION" ]]; then
-    echo -e "${green}✅ Xray is running${plain}"
+    echo -e "${green}✅ Binary is valid${plain}"
     echo -e "${green}   Version: $RESTORED_VERSION${plain}"
 else
     echo -e "${red}❌ Xray did not return version output${plain}"

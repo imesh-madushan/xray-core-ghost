@@ -38,7 +38,7 @@ echo -e "${green}🚀 Starting Xray Deployment${plain}"
 echo -e "${blue}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${plain}"
 
 # Step 1: Backup current binary
-echo -e "\n${yellow}[1/4]${plain} Managing backup..."
+echo -e "\n${yellow}[1/3]${plain} Managing backup..."
 if [[ -f "$XRAY_BIN_PATH" ]]; then
     if [[ -f "$XRAY_BACKUP_PATH" ]]; then
         # Backup already exists, replace it with current version
@@ -58,7 +58,7 @@ else
 fi
 
 # Step 2: Deploy new binary
-echo -e "\n${yellow}[2/4]${plain} Deploying new Xray binary..."
+echo -e "\n${yellow}[2/3]${plain} Deploying new Xray binary..."
 
 # Remove existing binary before copy to avoid "Text file busy"
 if [[ -f "$XRAY_BIN_PATH" ]]; then
@@ -78,27 +78,11 @@ if [[ $? -ne 0 ]]; then
 fi
 echo -e "${green}✅ New binary deployed: $XRAY_BIN_PATH${plain}"
 
-# Step 3: Restart x-ui
-echo -e "\n${yellow}[3/4]${plain} Restarting x-ui..."
-if x-ui restart; then
-    echo -e "${green}✅ x-ui restarted successfully${plain}"
-else
-    echo -e "${red}❌ Failed to restart x-ui${plain}"
-    echo -e "${yellow}⚠️  Attempting to restore from backup...${plain}"
-    if [[ -f "$XRAY_BACKUP_PATH" ]]; then
-        cp "$XRAY_BACKUP_PATH" "$XRAY_BIN_PATH"
-        chmod +x "$XRAY_BIN_PATH"
-        x-ui restart
-        echo -e "${yellow}⚠️  Restored from backup and restarted x-ui${plain}"
-    fi
-    exit 1
-fi
-
-# Step 4: Verify
-echo -e "\n${yellow}[4/4]${plain} Verifying deployment..."
+# Step 3: Verify
+echo -e "\n${yellow}[3/3]${plain} Verifying deployment..."
 XRAY_VERSION=$($XRAY_BIN_PATH -version 2>&1 | head -1)
 if [[ -n "$XRAY_VERSION" ]]; then
-    echo -e "${green}✅ Xray is running${plain}"
+    echo -e "${green}✅ Binary is valid${plain}"
     echo -e "${green}   Version: $XRAY_VERSION${plain}"
 else
     echo -e "${red}❌ Xray did not return version output${plain}"
@@ -120,6 +104,6 @@ if [[ -f "$XRAY_BACKUP_PATH" ]]; then
 fi
 
 echo -e "\n${blue}Remote restore command if needed:${plain}"
-echo -e "   ${yellow}sudo cp $XRAY_BACKUP_PATH $XRAY_BIN_PATH && sudo x-ui restart${plain}"
+echo -e "   ${yellow}sudo cp $XRAY_BACKUP_PATH $XRAY_BIN_PATH${plain}"
 
 exit 0
