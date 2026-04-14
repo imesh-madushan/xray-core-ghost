@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy to Server via SSH
+      - name: Deploy to ARM Server via SSH
         uses: appleboy/ssh-action@v1.0.0
 
         with:
@@ -19,17 +19,32 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
 
           script: |
+            set -e
+
+            echo "📁 Moving to project directory..."
             cd /home/ubuntu/prj/xray-core-ghost
 
             echo "📥 Pulling latest code..."
             git pull origin main
 
-            echo "⚙️ Building Xray Ghost..."
-            export PATH=$PATH:/usr/local/go/bin
-            CGO_ENABLED=0 go mod tidy
-            CGO_ENABLED=0 go build -o xray -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -v ./main
+            echo "⚙️ Checking Go version..."
+            /usr/local/go/bin/go version
+
+            echo "🧹 Cleaning module cache..."
+            /usr/local/go/bin/go clean -modcache
+
+            echo "📦 Downloading dependencies..."
+            /usr/local/go/bin/go mod tidy
+
+            echo "🔨 Building Xray Ghost..."
+            CGO_ENABLED=0 /usr/local/go/bin/go build \
+              -o xray \
+              -trimpath \
+              -buildvcs=false \
+              -ldflags="-s -w -buildid=" \
+              -v ./main
 
             echo "🔄 Restarting service..."
             sudo systemctl restart xray-ghost
 
-            echo "✅ Deploy completed"
+            echo "✅ Deployment successful!"

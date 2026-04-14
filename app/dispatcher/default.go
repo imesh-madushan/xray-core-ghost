@@ -295,6 +295,27 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 			result, err := sniffer(ctx, cReader, sniffingRequest.MetadataOnly, destination.Network)
 			if err == nil {
 				content.Protocol = result.Protocol()
+				domain := result.Domain()
+				if domain != "" {
+					sessionInbound := session.InboundFromContext(ctx)
+					if sessionInbound != nil && sessionInbound.User != nil && len(sessionInbound.User.Email) > 0 {
+						email := sessionInbound.User.Email
+						upName := "user>>>" + email + ">>>domain>>>" + domain + ">>>traffic>>>uplink"
+						if upC, _ := stats.GetOrRegisterCounter(d.stats, upName); upC != nil {
+							outbound.Reader = &SizeStatReader{
+								Counter: upC,
+								Reader:  outbound.Reader,
+							}
+						}
+						downName := "user>>>" + email + ">>>domain>>>" + domain + ">>>traffic>>>downlink"
+						if downC, _ := stats.GetOrRegisterCounter(d.stats, downName); downC != nil {
+							outbound.Writer = &SizeStatWriter{
+								Counter: downC,
+								Writer:  outbound.Writer,
+							}
+						}
+					}
+				}
 			}
 			if err == nil && d.shouldOverride(ctx, result, sniffingRequest, destination) {
 				domain := result.Domain()
@@ -350,6 +371,27 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 		result, err := sniffer(ctx, cReader, sniffingRequest.MetadataOnly, destination.Network)
 		if err == nil {
 			content.Protocol = result.Protocol()
+			domain := result.Domain()
+			if domain != "" {
+				sessionInbound := session.InboundFromContext(ctx)
+				if sessionInbound != nil && sessionInbound.User != nil && len(sessionInbound.User.Email) > 0 {
+					email := sessionInbound.User.Email
+					upName := "user>>>" + email + ">>>domain>>>" + domain + ">>>traffic>>>uplink"
+					if upC, _ := stats.GetOrRegisterCounter(d.stats, upName); upC != nil {
+						outbound.Reader = &SizeStatReader{
+							Counter: upC,
+							Reader:  outbound.Reader,
+						}
+					}
+					downName := "user>>>" + email + ">>>domain>>>" + domain + ">>>traffic>>>downlink"
+					if downC, _ := stats.GetOrRegisterCounter(d.stats, downName); downC != nil {
+						outbound.Writer = &SizeStatWriter{
+							Counter: downC,
+							Writer:  outbound.Writer,
+						}
+					}
+				}
+			}
 		}
 		if err == nil && d.shouldOverride(ctx, result, sniffingRequest, destination) {
 			domain := result.Domain()
