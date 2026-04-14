@@ -9,7 +9,9 @@ plain='\033[0m'
 
 # Xray installation directory (3x-UI location)
 XRAY_BIN_DIR="/usr/local/x-ui/bin"
-XRAY_BIN_NAME="xray"
+SYS_ARCH=$(uname -m)
+SYS_OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+XRAY_BIN_NAME="xray-${SYS_OS}-${SYS_ARCH}"
 XRAY_BIN_PATH="${XRAY_BIN_DIR}/${XRAY_BIN_NAME}"
 XRAY_BACKUP_PATH="${XRAY_BIN_DIR}/${XRAY_BIN_NAME}.backup"
 
