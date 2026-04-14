@@ -1,0 +1,34 @@
+name: Deploy Xray Ghost
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to Server via SSH
+        uses: appleboy/ssh-action@v1.0.0
+
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+
+          script: |
+            cd /home/ubuntu/prj/xray-core-ghost
+
+            echo "Pulling latest code..."
+            git pull origin main
+
+            echo "Building project..."
+            /usr/local/go/bin/go mod tidy
+            /usr/local/go/bin/go build -o xray
+
+            echo "Restarting service..."
+            sudo systemctl restart xray-ghost
+
+            echo "Done 🚀"
