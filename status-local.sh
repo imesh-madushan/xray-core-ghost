@@ -11,8 +11,8 @@ echo -e "${blue}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${blue}        Xray Ghost Deployment Status Check${plain}"
 echo -e "${blue}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${plain}"
 
-XRAY_BIN="/usr/local/bin/xray"
-XRAY_BACKUP="/usr/local/bin/xray.backup"
+XRAY_BIN="/usr/local/x-ui/bin/xray"
+XRAY_BACKUP="/usr/local/x-ui/bin/xray.backup"
 XRAY_SERVICE="xray"
 XRAY_CONFIG="/usr/local/etc/xray/config.json"
 BANDWIDTH_SOCKET="/tmp/xray_bandwidth.sock"

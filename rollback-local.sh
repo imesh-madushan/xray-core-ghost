@@ -7,8 +7,8 @@ yellow='\033[0;33m'
 blue='\033[0;34m'
 plain='\033[0m'
 
-# Xray installation directory
-XRAY_BIN_DIR="/usr/local/bin"
+# Xray installation directory (3x-UI location)
+XRAY_BIN_DIR="/usr/local/x-ui/bin"
 XRAY_BIN_NAME="xray"
 XRAY_BIN_PATH="${XRAY_BIN_DIR}/${XRAY_BIN_NAME}"
 XRAY_BACKUP_PATH="${XRAY_BIN_DIR}/${XRAY_BIN_NAME}.backup"
