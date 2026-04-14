@@ -21,9 +21,6 @@ XRAY_BIN_PATH="${XRAY_BIN_DIR}/${XRAY_BIN_NAME}"
 XRAY_BACKUP_PATH="${XRAY_BIN_DIR}/${XRAY_BIN_NAME}.backup"
 XRAY_BUILD_PATH="/home/ubuntu/prj/xray-core-ghost/xray-${SYS_OS}-${SYS_ARCH}"
 
-# Service name
-XRAY_SERVICE="xray"
-
 # Check if running as root
 if [[ $EUID -ne 0 ]]; then
     echo -e "${red}❌ This script must be run as root${plain}"
@@ -40,22 +37,8 @@ echo -e "${blue}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${green}🚀 Starting Xray Deployment${plain}"
 echo -e "${blue}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${plain}"
 
-# Step 1: Stop Xray service
-echo -e "\n${yellow}[1/5]${plain} Stopping Xray service..."
-if systemctl is-active --quiet $XRAY_SERVICE; then
-    systemctl stop $XRAY_SERVICE
-    if [[ $? -eq 0 ]]; then
-        echo -e "${green}✅ Service stopped successfully${plain}"
-    else
-        echo -e "${red}❌ Failed to stop service${plain}"
-        exit 1
-    fi
-else
-    echo -e "${yellow}⚠️  Service is not running${plain}"
-fi
-
-# Step 2: Backup current binary
-echo -e "\n${yellow}[2/5]${plain} Managing backup..."
+# Step 1: Backup current binary
+echo -e "\n${yellow}[1/4]${plain} Managing backup..."
 if [[ -f "$XRAY_BIN_PATH" ]]; then
     if [[ -f "$XRAY_BACKUP_PATH" ]]; then
         # Backup already exists, replace it with current version
@@ -74,8 +57,8 @@ else
     echo -e "${yellow}⚠️  No existing binary found at: $XRAY_BIN_PATH${plain}"
 fi
 
-# Step 3: Deploy new binary
-echo -e "\n${yellow}[3/5]${plain} Deploying new Xray binary..."
+# Step 2: Deploy new binary
+echo -e "\n${yellow}[2/4]${plain} Deploying new Xray binary..."
 
 # Remove existing binary before copy to avoid "Text file busy"
 if [[ -f "$XRAY_BIN_PATH" ]]; then
@@ -95,33 +78,30 @@ if [[ $? -ne 0 ]]; then
 fi
 echo -e "${green}✅ New binary deployed: $XRAY_BIN_PATH${plain}"
 
-# Step 4: Start service
-echo -e "\n${yellow}[4/5]${plain} Starting Xray service..."
-systemctl start $XRAY_SERVICE
-if [[ $? -eq 0 ]]; then
-    echo -e "${green}✅ Service started successfully${plain}"
+# Step 3: Restart x-ui
+echo -e "\n${yellow}[3/4]${plain} Restarting x-ui..."
+if x-ui restart; then
+    echo -e "${green}✅ x-ui restarted successfully${plain}"
 else
-    echo -e "${red}❌ Failed to start service${plain}"
+    echo -e "${red}❌ Failed to restart x-ui${plain}"
     echo -e "${yellow}⚠️  Attempting to restore from backup...${plain}"
     if [[ -f "$XRAY_BACKUP_PATH" ]]; then
         cp "$XRAY_BACKUP_PATH" "$XRAY_BIN_PATH"
         chmod +x "$XRAY_BIN_PATH"
-        systemctl start $XRAY_SERVICE
-        echo -e "${yellow}⚠️  Restored from backup and restarted${plain}"
+        x-ui restart
+        echo -e "${yellow}⚠️  Restored from backup and restarted x-ui${plain}"
     fi
     exit 1
 fi
 
-# Step 5: Verify
-echo -e "\n${yellow}[5/5]${plain} Verifying deployment..."
-sleep 2
-
-if systemctl is-active --quiet $XRAY_SERVICE; then
-    XRAY_VERSION=$($XRAY_BIN_PATH -version 2>&1 | head -1)
+# Step 4: Verify
+echo -e "\n${yellow}[4/4]${plain} Verifying deployment..."
+XRAY_VERSION=$($XRAY_BIN_PATH -version 2>&1 | head -1)
+if [[ -n "$XRAY_VERSION" ]]; then
     echo -e "${green}✅ Xray is running${plain}"
     echo -e "${green}   Version: $XRAY_VERSION${plain}"
 else
-    echo -e "${red}❌ Xray is not running${plain}"
+    echo -e "${red}❌ Xray did not return version output${plain}"
     exit 1
 fi
 
@@ -140,6 +120,6 @@ if [[ -f "$XRAY_BACKUP_PATH" ]]; then
 fi
 
 echo -e "\n${blue}Remote restore command if needed:${plain}"
-echo -e "   ${yellow}sudo cp $XRAY_BACKUP_PATH $XRAY_BIN_PATH && sudo systemctl restart $XRAY_SERVICE${plain}"
+echo -e "   ${yellow}sudo cp $XRAY_BACKUP_PATH $XRAY_BIN_PATH && sudo x-ui restart${plain}"
 
 exit 0

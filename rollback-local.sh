@@ -20,9 +20,6 @@ XRAY_BIN_NAME="xray-${SYS_OS}-${SYS_ARCH}"
 XRAY_BIN_PATH="${XRAY_BIN_DIR}/${XRAY_BIN_NAME}"
 XRAY_BACKUP_PATH="${XRAY_BIN_DIR}/${XRAY_BIN_NAME}.backup"
 
-# Service name
-XRAY_SERVICE="xray"
-
 # Check if running as root
 if [[ $EUID -ne 0 ]]; then
     echo -e "${red}❌ This script must be run as root${plain}"
@@ -51,7 +48,7 @@ BACKUP_VERSION=$($XRAY_BACKUP_PATH -version 2>&1 | head -1)
 echo -e "   Backup:  ${yellow}$BACKUP_VERSION${plain}"
 
 # Confirm action
-echo -e "\n${red}⚠️  This will restore the backup and restart Xray${plain}"
+echo -e "\n${red}⚠️  This will restore the backup and restart x-ui${plain}"
 read -p "Do you want to continue? (yes/no): " -r CONFIRM
 
 if [[ ! "$CONFIRM" =~ ^[Yy][Ee][Ss]$ ]]; then
@@ -59,17 +56,8 @@ if [[ ! "$CONFIRM" =~ ^[Yy][Ee][Ss]$ ]]; then
     exit 0
 fi
 
-# Step 1: Stop service
-echo -e "\n${yellow}[1/4]${plain} Stopping Xray service..."
-if systemctl is-active --quiet $XRAY_SERVICE; then
-    systemctl stop $XRAY_SERVICE
-    echo -e "${green}✅ Service stopped${plain}"
-else
-    echo -e "${yellow}⚠️  Service was not running${plain}"
-fi
-
-# Step 2: Restore backup
-echo -e "\n${yellow}[2/4]${plain} Restoring backup binary..."
+# Step 1: Restore backup
+echo -e "\n${yellow}[1/3]${plain} Restoring backup binary..."
 cp "$XRAY_BACKUP_PATH" "$XRAY_BIN_PATH"
 if [[ $? -ne 0 ]]; then
     echo -e "${red}❌ Failed to restore backup${plain}"
@@ -79,25 +67,22 @@ fi
 chmod +x "$XRAY_BIN_PATH"
 echo -e "${green}✅ Backup restored to working binary${plain}"
 
-# Step 3: Start service
-echo -e "\n${yellow}[3/4]${plain} Starting Xray service..."
-systemctl start $XRAY_SERVICE
-if [[ $? -ne 0 ]]; then
-    echo -e "${red}❌ Failed to start service${plain}"
+# Step 2: Restart x-ui
+echo -e "\n${yellow}[2/3]${plain} Restarting x-ui..."
+if ! x-ui restart; then
+    echo -e "${red}❌ Failed to restart x-ui${plain}"
     exit 1
 fi
-echo -e "${green}✅ Service started${plain}"
+echo -e "${green}✅ x-ui restarted${plain}"
 
-# Step 4: Verify
-echo -e "\n${yellow}[4/4]${plain} Verifying service..."
-sleep 2
-
-if systemctl is-active --quiet $XRAY_SERVICE; then
-    RESTORED_VERSION=$($XRAY_BIN_PATH -version 2>&1 | head -1)
+# Step 3: Verify
+echo -e "\n${yellow}[3/3]${plain} Verifying service..."
+RESTORED_VERSION=$($XRAY_BIN_PATH -version 2>&1 | head -1)
+if [[ -n "$RESTORED_VERSION" ]]; then
     echo -e "${green}✅ Xray is running${plain}"
     echo -e "${green}   Version: $RESTORED_VERSION${plain}"
 else
-    echo -e "${red}❌ Xray is not running${plain}"
+    echo -e "${red}❌ Xray did not return version output${plain}"
     exit 1
 fi
 
