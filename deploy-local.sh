@@ -46,15 +46,6 @@ if systemctl is-active --quiet $XRAY_SERVICE; then
     systemctl stop $XRAY_SERVICE
     if [[ $? -eq 0 ]]; then
         echo -e "${green}✅ Service stopped successfully${plain}"
-        # Wait for file handles to be released
-        echo -e "${blue}   → Waiting for file handles to release...${plain}"
-        sleep 2
-        
-        # Force close any remaining processes using the file
-        if command -v fuser &> /dev/null && [[ -f "$XRAY_BIN_PATH" ]]; then
-            fuser -k "$XRAY_BIN_PATH" 2>/dev/null || true
-            sleep 1
-        fi
     else
         echo -e "${red}❌ Failed to stop service${plain}"
         exit 1
@@ -86,20 +77,14 @@ fi
 # Step 3: Deploy new binary
 echo -e "\n${yellow}[3/5]${plain} Deploying new Xray binary..."
 
-# Retry logic for copy operation (handles "Text file busy" errors)
-RETRY_COUNT=0
-MAX_RETRIES=5
-while [[ $RETRY_COUNT -lt $MAX_RETRIES ]]; do
-    cp "$XRAY_BUILD_PATH" "$XRAY_BIN_PATH" 2>/dev/null && break
-    RETRY_COUNT=$((RETRY_COUNT + 1))
-    if [[ $RETRY_COUNT -lt $MAX_RETRIES ]]; then
-        echo -e "${yellow}   → Retry $RETRY_COUNT/$MAX_RETRIES (file might be in use)...${plain}"
-        sleep 1
-    fi
-done
+# Remove existing binary before copy to avoid "Text file busy"
+if [[ -f "$XRAY_BIN_PATH" ]]; then
+    rm -f "$XRAY_BIN_PATH"
+fi
 
-if [[ $RETRY_COUNT -eq $MAX_RETRIES ]]; then
-    echo -e "${red}❌ Failed to copy new binary after $MAX_RETRIES attempts${plain}"
+cp "$XRAY_BUILD_PATH" "$XRAY_BIN_PATH"
+if [[ $? -ne 0 ]]; then
+    echo -e "${red}❌ Failed to copy new binary${plain}"
     exit 1
 fi
 
