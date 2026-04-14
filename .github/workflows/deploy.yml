@@ -44,6 +44,9 @@ jobs:
               -ldflags="-s -w -buildid=" \
               -v ./main
 
+            echo "📥 Installing from local script..."
+            sudo bash /home/ubuntu/prj/xray-core-ghost/install-local.sh install --version v0.0.0 --force
+            
             echo "🔄 Restarting service..."
             sudo systemctl restart xray-ghost
 
