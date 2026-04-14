@@ -302,7 +302,7 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 	} else {
 		go func() {
 			cReader := &cachedReader{
-				reader: outbound.Reader.(*pipe.Reader),
+				reader: outbound.Reader.(buf.TimeoutReader),
 			}
 			outbound.Reader = cReader
 			result, err := sniffer(ctx, cReader, sniffingRequest.MetadataOnly, destination.Network)
