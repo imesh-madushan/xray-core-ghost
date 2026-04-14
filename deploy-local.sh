@@ -11,6 +11,11 @@ plain='\033[0m'
 XRAY_BIN_DIR="/usr/local/x-ui/bin"
 SYS_ARCH=$(uname -m)
 SYS_OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+# Normalize arch to match Go convention
+case "$SYS_ARCH" in
+  aarch64) SYS_ARCH="arm64" ;;
+  x86_64) SYS_ARCH="amd64" ;;
+esac
 XRAY_BIN_NAME="xray-${SYS_OS}-${SYS_ARCH}"
 XRAY_BIN_PATH="${XRAY_BIN_DIR}/${XRAY_BIN_NAME}"
 XRAY_BACKUP_PATH="${XRAY_BIN_DIR}/${XRAY_BIN_NAME}.backup"

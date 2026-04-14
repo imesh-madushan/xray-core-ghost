@@ -13,6 +13,11 @@ echo -e "${blue}━━━━━━━━━━━━━━━━━━━━━�
 
 SYS_ARCH=$(uname -m)
 SYS_OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+# Normalize arch to match Go convention
+case "$SYS_ARCH" in
+  aarch64) SYS_ARCH="arm64" ;;
+  x86_64) SYS_ARCH="amd64" ;;
+esac
 XRAY_BIN="/usr/local/x-ui/bin/xray-${SYS_OS}-${SYS_ARCH}"
 XRAY_BACKUP="/usr/local/x-ui/bin/xray-${SYS_OS}-${SYS_ARCH}.backup"
 XRAY_SERVICE="xray"
