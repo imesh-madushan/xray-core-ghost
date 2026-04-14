@@ -216,6 +216,36 @@ func (d *ConnectionBandwidthData) BuildRecord() *BandwidthRecord {
 // GlobalBandwidthEmitter is the global emitter instance
 var GlobalBandwidthEmitter *BandwidthEmitter
 
+func getCountingReader(link *transport.Link) *CountingReader {
+	if link == nil || link.Reader == nil {
+		return nil
+	}
+
+	if reader, ok := link.Reader.(*CountingReader); ok {
+		return reader
+	}
+
+	if cached, ok := link.Reader.(*cachedReader); ok {
+		if reader, ok := cached.reader.(*CountingReader); ok {
+			return reader
+		}
+	}
+
+	return nil
+}
+
+func getCountingWriter(link *transport.Link) *CountingWriter {
+	if link == nil || link.Writer == nil {
+		return nil
+	}
+
+	if writer, ok := link.Writer.(*CountingWriter); ok {
+		return writer
+	}
+
+	return nil
+}
+
 // InitBandwidthEmitter initializes the global emitter with the socket path
 func InitBandwidthEmitter(socketPath string) {
 	if socketPath == "" {
@@ -227,22 +257,17 @@ func InitBandwidthEmitter(socketPath string) {
 // EmitBandwidth emits a bandwidth record for the given link if it contains counting wrappers
 func EmitBandwidth(inbound *transport.Link, outbound *transport.Link, domain string, user string, inboundTag string) {
 	if GlobalBandwidthEmitter == nil {
-		return
+		InitBandwidthEmitter("")
 	}
 
 	if user == "" {
 		return
 	}
 
-	var countingReader *CountingReader
-	var countingWriter *CountingWriter
-
-	// Check if the link contains our counting wrappers
-	if reader, ok := outbound.Reader.(*CountingReader); ok {
-		countingReader = reader
-	}
-	if writer, ok := inbound.Writer.(*CountingWriter); ok {
-		countingWriter = writer
+	countingReader := getCountingReader(outbound)
+	countingWriter := getCountingWriter(inbound)
+	if countingWriter == nil {
+		countingWriter = getCountingWriter(outbound)
 	}
 
 	// Only emit if we have both reader and writer tracking
