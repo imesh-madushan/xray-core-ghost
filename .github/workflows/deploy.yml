@@ -36,27 +36,11 @@ jobs:
             echo "📦 Downloading dependencies..."
             /usr/local/go/bin/go mod tidy
 
-            echo "🔨 Building Xray Ghost..."
             SYS_OS=$(/usr/local/go/bin/go env GOOS)
             SYS_ARCH=$(/usr/local/go/bin/go env GOARCH)
-            CGO_ENABLED=0 /usr/local/go/bin/go build \
-              -o "xray-${SYS_OS}-${SYS_ARCH}" \
-              -trimpath \
-              -buildvcs=false \
-              -ldflags="-s -w -buildid=" \
-              -v ./main
-
-            if [[ $? -ne 0 ]]; then
-              echo "❌ Build failed"
-              exit 1
-            fi
 
             echo ""
-            echo "📊 Build successful. Binary size:"
-            ls -lh "xray-${SYS_OS}-${SYS_ARCH}"
-
-            echo ""
-            echo "🔄 Running deployment script..."
+            echo "🔄 Running build & deployment script..."
             sudo bash ./deploy-local.sh
             
             if [[ $? -ne 0 ]]; then

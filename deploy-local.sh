@@ -27,18 +27,40 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-# Check if the built binary exists
-if [[ ! -f "$XRAY_BUILD_PATH" ]]; then
-    echo -e "${red}❌ Built Xray binary not found at: $XRAY_BUILD_PATH${plain}"
+echo -e "${blue}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${plain}"
+echo -e "${green}🚀 Starting Xray Build & Deployment${plain}"
+echo -e "${blue}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${plain}"
+
+# Step 1: Build new binary
+echo -e "\n${yellow}[1/4]${plain} Building Xray binary..."
+export PATH=$PATH:/usr/local/go/bin
+if command -v go >/dev/null 2>&1; then
+    GO_CMD="go"
+elif [[ -x "/usr/local/go/bin/go" ]]; then
+    GO_CMD="/usr/local/go/bin/go"
+else
+    echo -e "${red}❌ Go compiler not found. Please install Go.${plain}"
     exit 1
 fi
 
-echo -e "${blue}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${plain}"
-echo -e "${green}🚀 Starting Xray Deployment${plain}"
-echo -e "${blue}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${plain}"
+echo -e "${blue}   → Using Go: $(${GO_CMD} version)${plain}"
+cd /home/ubuntu/prj/xray-core-ghost || exit 1
 
-# Step 1: Backup current binary
-echo -e "\n${yellow}[1/3]${plain} Managing backup..."
+CGO_ENABLED=0 ${GO_CMD} build \
+  -o "$XRAY_BUILD_PATH" \
+  -trimpath \
+  -buildvcs=false \
+  -ldflags="-s -w -buildid=" \
+  ./main
+
+if [[ $? -ne 0 ]]; then
+    echo -e "${red}❌ Build failed${plain}"
+    exit 1
+fi
+echo -e "${green}✅ Build successful: $XRAY_BUILD_PATH${plain}"
+
+# Step 2: Backup current binary
+echo -e "\n${yellow}[2/4]${plain} Managing backup..."
 if [[ -f "$XRAY_BIN_PATH" ]]; then
     if [[ -f "$XRAY_BACKUP_PATH" ]]; then
         # Backup already exists, replace it with current version
@@ -57,8 +79,8 @@ else
     echo -e "${yellow}⚠️  No existing binary found at: $XRAY_BIN_PATH${plain}"
 fi
 
-# Step 2: Deploy new binary
-echo -e "\n${yellow}[2/3]${plain} Deploying new Xray binary..."
+# Step 3: Deploy new binary
+echo -e "\n${yellow}[3/4]${plain} Deploying new Xray binary..."
 
 # Remove existing binary before copy to avoid "Text file busy"
 if [[ -f "$XRAY_BIN_PATH" ]]; then
@@ -78,8 +100,8 @@ if [[ $? -ne 0 ]]; then
 fi
 echo -e "${green}✅ New binary deployed: $XRAY_BIN_PATH${plain}"
 
-# Step 3: Verify
-echo -e "\n${yellow}[3/3]${plain} Verifying deployment..."
+# Step 4: Verify
+echo -e "\n${yellow}[4/4]${plain} Verifying deployment..."
 XRAY_VERSION=$($XRAY_BIN_PATH -version 2>&1 | head -1)
 if [[ -n "$XRAY_VERSION" ]]; then
     echo -e "${green}✅ Binary is valid${plain}"
