@@ -11,18 +11,26 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
+	corenet "github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport"
 )
 
 // BandwidthRecord holds the tracked bandwidth data for a connection
 type BandwidthRecord struct {
-	User       string    `json:"user"`
-	Domain     string    `json:"domain"`
-	InboundTag string    `json:"inboundTag"`
-	UpBytes    int64     `json:"upBytes"`
-	DownBytes  int64     `json:"downBytes"`
-	Duration   int64     `json:"duration"`
-	Timestamp  time.Time `json:"timestamp"`
+	User        string    `json:"user"`
+	Domain      string    `json:"domain"`
+	InboundTag  string    `json:"inboundTag"`
+	OutboundTag string    `json:"outboundTag,omitempty"`
+	SourceIP    string    `json:"sourceIP,omitempty"`
+	SourcePort  int       `json:"sourcePort,omitempty"`
+	DestPort    int       `json:"destPort,omitempty"`
+	Network     string    `json:"network,omitempty"`
+	Protocol    string    `json:"protocol,omitempty"`
+	UpBytes     int64     `json:"upBytes"`
+	DownBytes   int64     `json:"downBytes"`
+	Duration    int64     `json:"duration"`
+	Timestamp   time.Time `json:"timestamp"`
 }
 
 // CountingReader wraps a buf.Reader and counts bytes read
@@ -180,36 +188,54 @@ func (e *BandwidthEmitter) Emit(record *BandwidthRecord) {
 
 // ConnectionBandwidthData holds the aggregated bandwidth data for a complete connection
 type ConnectionBandwidthData struct {
-	reader     *CountingReader
-	writer     *CountingWriter
-	user       string
-	domain     string
-	inboundTag string
-	startTime  time.Time
+	reader      *CountingReader
+	writer      *CountingWriter
+	user        string
+	domain      string
+	inboundTag  string
+	outboundTag string
+	sourceIP    string
+	sourcePort  int
+	destPort    int
+	network     string
+	protocol    string
+	startTime   time.Time
 }
 
 // NewConnectionBandwidthData creates tracking data for a connection
-func NewConnectionBandwidthData(reader *CountingReader, writer *CountingWriter, user, domain, inboundTag string) *ConnectionBandwidthData {
+func NewConnectionBandwidthData(reader *CountingReader, writer *CountingWriter, user, domain, inboundTag, outboundTag, sourceIP string, sourcePort, destPort int, network, protocol string) *ConnectionBandwidthData {
 	return &ConnectionBandwidthData{
-		reader:     reader,
-		writer:     writer,
-		user:       user,
-		domain:     domain,
-		inboundTag: inboundTag,
-		startTime:  time.Now(),
+		reader:      reader,
+		writer:      writer,
+		user:        user,
+		domain:      domain,
+		inboundTag:  inboundTag,
+		outboundTag: outboundTag,
+		sourceIP:    sourceIP,
+		sourcePort:  sourcePort,
+		destPort:    destPort,
+		network:     network,
+		protocol:    protocol,
+		startTime:   time.Now(),
 	}
 }
 
-// BuildRecord creates the final bandwidth record with collected metrics
-func (d *ConnectionBandwidthData) BuildRecord() *BandwidthRecord {
+// BuildRecord creates the bandwidth record with specified byte counts
+func (d *ConnectionBandwidthData) BuildRecord(upBytes, downBytes int64) *BandwidthRecord {
 	return &BandwidthRecord{
-		User:       d.user,
-		Domain:     d.domain,
-		InboundTag: d.inboundTag,
-		UpBytes:    d.writer.GetUpBytes(),
-		DownBytes:  d.reader.GetDownBytes(),
-		Duration:   int64(time.Since(d.startTime).Seconds()),
-		Timestamp:  time.Now(),
+		User:        d.user,
+		Domain:      d.domain,
+		InboundTag:  d.inboundTag,
+		OutboundTag: d.outboundTag,
+		SourceIP:    d.sourceIP,
+		SourcePort:  d.sourcePort,
+		DestPort:    d.destPort,
+		Network:     d.network,
+		Protocol:    d.protocol,
+		UpBytes:     upBytes,
+		DownBytes:   downBytes,
+		Duration:    int64(time.Since(d.startTime).Seconds()),
+		Timestamp:   time.Now(),
 	}
 }
 
@@ -254,14 +280,10 @@ func InitBandwidthEmitter(socketPath string) {
 	GlobalBandwidthEmitter = NewBandwidthEmitter(socketPath)
 }
 
-// EmitBandwidth emits a bandwidth record for the given link if it contains counting wrappers
-func EmitBandwidth(inbound *transport.Link, outbound *transport.Link, domain string, user string, inboundTag string) {
+// EmitBandwidth emits a bandwidth record for the given link when the connection ends
+func EmitBandwidth(ctx context.Context, inbound *transport.Link, outbound *transport.Link, domain string, dest corenet.Destination) {
 	if GlobalBandwidthEmitter == nil {
 		InitBandwidthEmitter("")
-	}
-
-	if user == "" {
-		return
 	}
 
 	countingReader := getCountingReader(outbound)
@@ -272,14 +294,105 @@ func EmitBandwidth(inbound *transport.Link, outbound *transport.Link, domain str
 
 	// Only emit if we have both reader and writer tracking
 	if countingReader != nil && countingWriter != nil {
+		var user, inboundTag, sourceIP string
+		var sourcePort int
+
+		if sessionInbound := session.InboundFromContext(ctx); sessionInbound != nil {
+			if sessionInbound.User != nil {
+				user = sessionInbound.User.Email
+			}
+			inboundTag = sessionInbound.Tag
+			if sessionInbound.Source.IsValid() {
+				sourceIP = sessionInbound.Source.Address.String()
+				sourcePort = int(sessionInbound.Source.Port)
+			}
+		}
+
+		if user == "" {
+			return
+		}
+
 		data := NewConnectionBandwidthData(
 			countingReader,
 			countingWriter,
 			user,
 			domain,
 			inboundTag,
+			"",
+			sourceIP,
+			sourcePort,
+			0,
+			"",
+			"",
 		)
-		record := data.BuildRecord()
+
+		// Populate initial available connection data
+		if content := session.ContentFromContext(ctx); content != nil {
+			data.protocol = content.Protocol
+		}
+		if outbounds := session.OutboundsFromContext(ctx); len(outbounds) > 0 {
+			data.outboundTag = outbounds[len(outbounds)-1].Tag
+		}
+		if dest.IsValid() {
+			data.destPort = int(dest.Port)
+			data.network = dest.Network.String()
+			if data.domain == "" {
+				data.domain = dest.Address.String()
+			}
+		}
+
+		// Emit IMMEDATELY to restore the original rapid-feedback functionality
+		initialUp := data.writer.GetUpBytes()
+		initialDown := data.reader.GetDownBytes()
+		record := data.BuildRecord(initialUp, initialDown)
 		GlobalBandwidthEmitter.Emit(record)
+
+		// Background polling to track long-lived connections accurately using deltas
+		go func() {
+			ticker := time.NewTicker(20 * time.Second)
+			defer ticker.Stop()
+
+			lastUp := initialUp
+			lastDown := initialDown
+
+			for {
+				select {
+				case <-ticker.C:
+					currentUp := data.writer.GetUpBytes()
+					currentDown := data.reader.GetDownBytes()
+					deltaUp := currentUp - lastUp
+					deltaDown := currentDown - lastDown
+
+					if deltaUp > 0 || deltaDown > 0 {
+						// Update delayed properties (routing takes time to resolve)
+						if content := session.ContentFromContext(ctx); content != nil {
+							data.protocol = content.Protocol
+						}
+						if outbounds := session.OutboundsFromContext(ctx); len(outbounds) > 0 {
+							data.outboundTag = outbounds[len(outbounds)-1].Tag
+						}
+						GlobalBandwidthEmitter.Emit(data.BuildRecord(deltaUp, deltaDown))
+						lastUp = currentUp
+						lastDown = currentDown
+					}
+				case <-ctx.Done():
+					currentUp := data.writer.GetUpBytes()
+					currentDown := data.reader.GetDownBytes()
+					deltaUp := currentUp - lastUp
+					deltaDown := currentDown - lastDown
+
+					if deltaUp > 0 || deltaDown > 0 {
+						if content := session.ContentFromContext(ctx); content != nil {
+							data.protocol = content.Protocol
+						}
+						if outbounds := session.OutboundsFromContext(ctx); len(outbounds) > 0 {
+							data.outboundTag = outbounds[len(outbounds)-1].Tag
+						}
+						GlobalBandwidthEmitter.Emit(data.BuildRecord(deltaUp, deltaDown))
+					}
+					return
+				}
+			}
+		}()
 	}
 }

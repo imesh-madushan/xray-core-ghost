@@ -298,6 +298,9 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 	sniffingRequest := content.SniffingRequest
 	inbound, outbound := d.getLink(ctx)
 	if !sniffingRequest.Enabled {
+		if sessionInbound := session.InboundFromContext(ctx); sessionInbound != nil && sessionInbound.User != nil {
+			EmitBandwidth(ctx, inbound, outbound, "", destination)
+		}
 		go d.routedDispatch(ctx, outbound, destination)
 	} else {
 		go func() {
@@ -329,12 +332,12 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 
 				// Emit bandwidth record with the sniffed domain
 				if sessionInbound := session.InboundFromContext(ctx); sessionInbound != nil && sessionInbound.User != nil {
-					EmitBandwidth(inbound, outbound, domain, sessionInbound.User.Email, sessionInbound.Tag)
+					EmitBandwidth(ctx, inbound, outbound, domain, destination)
 				}
 			} else if result != nil {
 				// Even if we don't override, we can still get the domain for bandwidth tracking
 				if sessionInbound := session.InboundFromContext(ctx); sessionInbound != nil && sessionInbound.User != nil {
-					EmitBandwidth(inbound, outbound, result.Domain(), sessionInbound.User.Email, sessionInbound.Tag)
+					EmitBandwidth(ctx, inbound, outbound, result.Domain(), destination)
 				}
 			}
 			d.routedDispatch(ctx, outbound, destination)
@@ -364,6 +367,9 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 	outbound = WrapLink(ctx, d.policy, d.stats, outbound)
 	sniffingRequest := content.SniffingRequest
 	if !sniffingRequest.Enabled {
+		if sessionInbound := session.InboundFromContext(ctx); sessionInbound != nil && sessionInbound.User != nil {
+			EmitBandwidth(ctx, nil, outbound, "", destination)
+		}
 		d.routedDispatch(ctx, outbound, destination)
 	} else {
 		cReader := &cachedReader{
@@ -394,12 +400,12 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 
 			// Emit bandwidth record with the sniffed domain
 			if sessionInbound := session.InboundFromContext(ctx); sessionInbound != nil && sessionInbound.User != nil {
-				EmitBandwidth(nil, outbound, domain, sessionInbound.User.Email, sessionInbound.Tag)
+				EmitBandwidth(ctx, nil, outbound, domain, destination)
 			}
 		} else if result != nil {
 			// Even if we don't override, we can still get the domain for bandwidth tracking
 			if sessionInbound := session.InboundFromContext(ctx); sessionInbound != nil && sessionInbound.User != nil {
-				EmitBandwidth(nil, outbound, result.Domain(), sessionInbound.User.Email, sessionInbound.Tag)
+				EmitBandwidth(ctx, nil, outbound, result.Domain(), destination)
 			}
 		}
 		d.routedDispatch(ctx, outbound, destination)
