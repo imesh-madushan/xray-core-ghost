@@ -183,11 +183,11 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 			trackOnlineIP(ctx, d.stats, user.Email, sessionInbound.Source.Address.String())
 		}
 
-		// Bandwidth tracking: wrap reader/writer with counting wrappers
+		// Bandwidth tracking: wrap outboundLink.Reader (Uplink) and outboundLink.Writer (Downlink)
 		countingReader := NewCountingReader(outboundLink.Reader.(buf.TimeoutReader))
-		countingWriter := NewCountingWriter(inboundLink.Writer)
+		countingWriter := NewCountingWriter(outboundLink.Writer)
 		outboundLink.Reader = countingReader
-		inboundLink.Writer = countingWriter
+		outboundLink.Writer = countingWriter
 	}
 
 	return inboundLink, outboundLink
@@ -224,10 +224,13 @@ func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager st
 		}
 
 		// Bandwidth tracking for external links
-		// Wrap with counting writer for uplink (if not already wrapped)
+		if _, ok := link.Reader.(*CountingReader); !ok {
+			if tr, ok := link.Reader.(buf.TimeoutReader); ok {
+				link.Reader = NewCountingReader(tr)
+			}
+		}
 		if _, ok := link.Writer.(*CountingWriter); !ok {
-			countingWriter := NewCountingWriter(link.Writer)
-			link.Writer = countingWriter
+			link.Writer = NewCountingWriter(link.Writer)
 		}
 	}
 

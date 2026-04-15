@@ -35,8 +35,8 @@ type BandwidthRecord struct {
 
 // CountingReader wraps a buf.Reader and counts bytes read
 type CountingReader struct {
-	reader    buf.TimeoutReader
-	downBytes int64
+	reader buf.TimeoutReader
+	count  int64
 	startTime time.Time
 	closed    int32
 	mu        sync.Mutex
@@ -54,7 +54,7 @@ func NewCountingReader(reader buf.TimeoutReader) *CountingReader {
 func (r *CountingReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	mb, err := r.reader.ReadMultiBuffer()
 	if !mb.IsEmpty() {
-		atomic.AddInt64(&r.downBytes, int64(mb.Len()))
+		atomic.AddInt64(&r.count, int64(mb.Len()))
 	}
 	return mb, err
 }
@@ -63,7 +63,7 @@ func (r *CountingReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 func (r *CountingReader) ReadMultiBufferTimeout(timeout time.Duration) (buf.MultiBuffer, error) {
 	mb, err := r.reader.ReadMultiBufferTimeout(timeout)
 	if !mb.IsEmpty() {
-		atomic.AddInt64(&r.downBytes, int64(mb.Len()))
+		atomic.AddInt64(&r.count, int64(mb.Len()))
 	}
 	return mb, err
 }
@@ -75,9 +75,9 @@ func (r *CountingReader) Interrupt() {
 	}
 }
 
-// GetDownBytes returns the total bytes read
-func (r *CountingReader) GetDownBytes() int64 {
-	return atomic.LoadInt64(&r.downBytes)
+// GetCount returns the total bytes read
+func (r *CountingReader) GetCount() int64 {
+	return atomic.LoadInt64(&r.count)
 }
 
 // GetDuration returns the duration since this reader was created
@@ -100,7 +100,7 @@ func (r *CountingReader) Close() error {
 // CountingWriter wraps a buf.Writer and counts bytes written
 type CountingWriter struct {
 	writer    buf.Writer
-	upBytes   int64
+	count     int64
 	startTime time.Time
 	closed    int32
 	mu        sync.Mutex
@@ -117,14 +117,14 @@ func NewCountingWriter(writer buf.Writer) *CountingWriter {
 // WriteMultiBuffer implements buf.Writer
 func (w *CountingWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	if !mb.IsEmpty() {
-		atomic.AddInt64(&w.upBytes, int64(mb.Len()))
+		atomic.AddInt64(&w.count, int64(mb.Len()))
 	}
 	return w.writer.WriteMultiBuffer(mb)
 }
 
-// GetUpBytes returns the total bytes written
-func (w *CountingWriter) GetUpBytes() int64 {
-	return atomic.LoadInt64(&w.upBytes)
+// GetCount returns the total bytes written
+func (w *CountingWriter) GetCount() int64 {
+	return atomic.LoadInt64(&w.count)
 }
 
 // GetDuration returns the duration since this writer was created
@@ -188,8 +188,8 @@ func (e *BandwidthEmitter) Emit(record *BandwidthRecord) {
 
 // ConnectionBandwidthData holds the aggregated bandwidth data for a complete connection
 type ConnectionBandwidthData struct {
-	reader      *CountingReader
-	writer      *CountingWriter
+	upTracker   *CountingReader
+	downTracker *CountingWriter
 	user        string
 	domain      string
 	inboundTag  string
@@ -203,10 +203,10 @@ type ConnectionBandwidthData struct {
 }
 
 // NewConnectionBandwidthData creates tracking data for a connection
-func NewConnectionBandwidthData(reader *CountingReader, writer *CountingWriter, user, domain, inboundTag, outboundTag, sourceIP string, sourcePort, destPort int, network, protocol string) *ConnectionBandwidthData {
+func NewConnectionBandwidthData(upTracker *CountingReader, downTracker *CountingWriter, user, domain, inboundTag, outboundTag, sourceIP string, sourcePort, destPort int, network, protocol string) *ConnectionBandwidthData {
 	return &ConnectionBandwidthData{
-		reader:      reader,
-		writer:      writer,
+		upTracker:   upTracker,
+		downTracker: downTracker,
 		user:        user,
 		domain:      domain,
 		inboundTag:  inboundTag,
@@ -286,14 +286,21 @@ func EmitBandwidth(ctx context.Context, inbound *transport.Link, outbound *trans
 		InitBandwidthEmitter("")
 	}
 
-	countingReader := getCountingReader(outbound)
-	countingWriter := getCountingWriter(inbound)
-	if countingWriter == nil {
-		countingWriter = getCountingWriter(outbound)
+	// outbound.Reader = data from user (UP)
+	// outbound.Writer = data to user (DOWN)
+	upTracker := getCountingReader(outbound)
+	downTracker := getCountingWriter(outbound)
+
+	// Fallback to inbound if outbound is not wrapped (less ideal)
+	if upTracker == nil {
+		upTracker = getCountingReader(inbound)
+	}
+	if downTracker == nil {
+		downTracker = getCountingWriter(inbound)
 	}
 
-	// Only emit if we have both reader and writer tracking
-	if countingReader != nil && countingWriter != nil {
+	// Only emit if we have tracking
+	if upTracker != nil || downTracker != nil {
 		var user, inboundTag, sourceIP string
 		var sourcePort int
 
@@ -313,8 +320,8 @@ func EmitBandwidth(ctx context.Context, inbound *transport.Link, outbound *trans
 		}
 
 		data := NewConnectionBandwidthData(
-			countingReader,
-			countingWriter,
+			upTracker,
+			downTracker,
 			user,
 			domain,
 			inboundTag,
@@ -326,7 +333,7 @@ func EmitBandwidth(ctx context.Context, inbound *transport.Link, outbound *trans
 			"",
 		)
 
-		// Populate initial available connection data
+		// Initial properties
 		if content := session.ContentFromContext(ctx); content != nil {
 			data.protocol = content.Protocol
 		}
@@ -341,13 +348,18 @@ func EmitBandwidth(ctx context.Context, inbound *transport.Link, outbound *trans
 			}
 		}
 
-		// Emit IMMEDATELY to restore the original rapid-feedback functionality
-		initialUp := data.writer.GetUpBytes()
-		initialDown := data.reader.GetDownBytes()
-		record := data.BuildRecord(initialUp, initialDown)
-		GlobalBandwidthEmitter.Emit(record)
+		// Emit IMMEDATELY
+		initialUp := int64(0)
+		if upTracker != nil {
+			initialUp = upTracker.GetCount()
+		}
+		initialDown := int64(0)
+		if downTracker != nil {
+			initialDown = downTracker.GetCount()
+		}
+		GlobalBandwidthEmitter.Emit(data.BuildRecord(initialUp, initialDown))
 
-		// Background polling to track long-lived connections accurately using deltas
+		// Background polling
 		go func() {
 			ticker := time.NewTicker(20 * time.Second)
 			defer ticker.Stop()
@@ -358,13 +370,19 @@ func EmitBandwidth(ctx context.Context, inbound *transport.Link, outbound *trans
 			for {
 				select {
 				case <-ticker.C:
-					currentUp := data.writer.GetUpBytes()
-					currentDown := data.reader.GetDownBytes()
+					currentUp := int64(0)
+					if data.upTracker != nil {
+						currentUp = data.upTracker.GetCount()
+					}
+					currentDown := int64(0)
+					if data.downTracker != nil {
+						currentDown = data.downTracker.GetCount()
+					}
+					
 					deltaUp := currentUp - lastUp
 					deltaDown := currentDown - lastDown
 
 					if deltaUp > 0 || deltaDown > 0 {
-						// Update delayed properties (routing takes time to resolve)
 						if content := session.ContentFromContext(ctx); content != nil {
 							data.protocol = content.Protocol
 						}
@@ -376,8 +394,15 @@ func EmitBandwidth(ctx context.Context, inbound *transport.Link, outbound *trans
 						lastDown = currentDown
 					}
 				case <-ctx.Done():
-					currentUp := data.writer.GetUpBytes()
-					currentDown := data.reader.GetDownBytes()
+					currentUp := int64(0)
+					if data.upTracker != nil {
+						currentUp = data.upTracker.GetCount()
+					}
+					currentDown := int64(0)
+					if data.downTracker != nil {
+						currentDown = data.downTracker.GetCount()
+					}
+					
 					deltaUp := currentUp - lastUp
 					deltaDown := currentDown - lastDown
 
