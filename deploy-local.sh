@@ -31,8 +31,8 @@ echo -e "${blue}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${green}🚀 Starting Xray Build & Deployment${plain}"
 echo -e "${blue}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${plain}"
 
-# Step 1: Build new binary
-echo -e "\n${yellow}[1/4]${plain} Building Xray binary..."
+# Step 1: Build binaries for multiple architectures
+echo -e "\n${yellow}[1/4]${plain} Building Xray binaries for multiple architectures..."
 export PATH=$PATH:/usr/local/go/bin
 if command -v go >/dev/null 2>&1; then
     GO_CMD="go"
@@ -46,21 +46,32 @@ fi
 echo -e "${blue}   → Using Go: $(${GO_CMD} version)${plain}"
 cd /home/ubuntu/prj/xray-core-ghost || exit 1
 
-CGO_ENABLED=0 ${GO_CMD} build \
-  -o "$XRAY_BUILD_PATH" \
-  -trimpath \
-  -buildvcs=false \
-  -ldflags="-s -w -buildid=" \
-  ./main
+# List of architectures to build
+ARCHS=("amd64" "arm64" "386")
+OS_TARGET="linux"
 
-if [[ $? -ne 0 ]]; then
-    echo -e "${red}❌ Build failed${plain}"
-    exit 1
-fi
-echo -e "${green}✅ Build successful: $XRAY_BUILD_PATH${plain}"
+for ARCH in "${ARCHS[@]}"; do
+    OUTPUT_PATH="/home/ubuntu/prj/xray-core-ghost/xray-${OS_TARGET}-${ARCH}"
+    echo -e "${blue}   → Building for ${OS_TARGET}/${ARCH}...${plain}"
+    
+    GOOS=$OS_TARGET GOARCH=$ARCH CGO_ENABLED=0 ${GO_CMD} build \
+      -o "$OUTPUT_PATH" \
+      -trimpath \
+      -buildvcs=false \
+      -ldflags="-s -w -buildid=" \
+      ./main
+      
+    if [[ $? -ne 0 ]]; then
+        echo -e "${red}❌ Build failed for ${ARCH}${plain}"
+        exit 1
+    fi
+    echo -e "${green}   ✅ Build successful: $OUTPUT_PATH${plain}"
+done
 
 # Step 2: Backup current binary
 echo -e "\n${yellow}[2/4]${plain} Managing backup..."
+# We use the current system architecture binary for deployment
+XRAY_BUILD_PATH="/home/ubuntu/prj/xray-core-ghost/xray-${SYS_OS}-${SYS_ARCH}"
 if [[ -f "$XRAY_BIN_PATH" ]]; then
     if [[ -f "$XRAY_BACKUP_PATH" ]]; then
         # Backup already exists, replace it with current version
